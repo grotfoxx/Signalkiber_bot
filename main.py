@@ -16,12 +16,20 @@ from telegram.ext import (
     ContextTypes,
 )
 from dotenv import load_dotenv
+from binance.client import Client  # Binance API
 
-# Загрузка токена из .env
+# Загрузка токенов
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN не найден в .env файле")
+
+BINANCE_API_KEY = os.getenv("API_KEY_BINANCE")
+BINANCE_API_SECRET = os.getenv("API_SECRET_BINANCE")
+if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+    raise ValueError("Binance ключи не найдены в .env файле")
+
+binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 
 # Файлы
 FEEDBACK_FILE = "feedback_data.json"
@@ -74,6 +82,14 @@ def get_coin_data(coin_id: str):
         "reddit": d.get("community_data", {}).get("reddit_subscribers"),
         "alexa": d.get("public_interest_stats", {}).get("alexa_rank"),
     }
+
+def get_binance_price(symbol="BTCUSDT"):
+    try:
+        ticker = binance_client.get_symbol_ticker(symbol=symbol)
+        return float(ticker["price"])
+    except Exception as e:
+        print(f"[ERROR] Binance API: {e}")
+        return None
 
 def get_news():
     html = get_html("https://cryptopanic.com/news/")
@@ -196,9 +212,13 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     trend, conf, reasons, truth, avg, ts = analyze(data, news, events, tw, rd, tg, gh)
 
+    binance_symbol = data["symbol"].upper() + "USDT"
+    binance_price = get_binance_price(binance_symbol)
+
     msg = (
         f"Монета: {data['name']} ({data['symbol'].upper()})\n"
-        f"Цена: ${data['price']}\n"
+        f"Цена (Coingecko): ${data['price']}\n"
+        f"Цена (Binance): ${binance_price if binance_price else 'N/A'}\n"
         f"Изм.24ч: {data['change_24h']}%  Ср.изм.: {avg:.2f}%\n"
         f"Тренд: {trend} ({conf}% увер.)\n"
         f"Оценка: {truth}\n"
